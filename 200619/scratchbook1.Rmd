@@ -116,7 +116,6 @@ a <- census_joined %>%
               title.position = "bottom")
   )
 
-a
 ```
 
 ```{r}
