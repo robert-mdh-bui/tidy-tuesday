@@ -1,0 +1,127 @@
+---
+title: "Tidy Tuesday Notebook"
+author: "bobbytables"
+date: "6/19/2020"
+output: ''
+---
+
+```{r}
+library(tidyverse)
+library(USAboundaries)
+library(sf)
+library(plotly)
+library(ggthemes)
+library(viridis)
+
+```
+
+```{r}
+census <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-06-16/census.csv')
+```
+
+```{r}
+divs_map <- us_states() %>%
+  filter(str_detect(stusps, "DC|PR|HI|AK", negate = TRUE)) %>% 
+  mutate(
+    division = case_when(
+      stusps %in% c("ME","NH","VT","MA","CT","RI") ~ "New England",
+      stusps %in% c("NY","PA","NJ") ~ "Middle Atlantic",
+      stusps %in% c("DE","FL","GA","MD","NC","SC","VA","WV") ~ "South Atlantic",
+      stusps %in% c("AL","KY","MS","TN") ~ "East South Central",
+      stusps %in% c("AR","LA","OK","TX") ~ "West South Central",
+      stusps %in% c("AZ","CO","MT","NM","NV","UT","WY","ID") ~ "Mountain",
+      stusps %in% c("WA","OR","CA") ~ "Pacific",
+      stusps %in% c("IA","KS","MN","MO","NE","ND","SD") ~ "West North Central",
+      stusps %in% c("IL","IN","MI","OH","WI") ~ "East North Central",
+    )
+  )
+```
+
+```{r}
+census_small <- census %>% 
+  filter(
+    region != "USA Total",
+    is.na(division) == 0,
+    year >= 1810
+  ) %>% 
+  mutate(
+    enslaved_pct = (black-black_free)/black
+  ) %>% 
+  select(division,year,enslaved_pct)
+
+census_joined <- census_small %>% 
+  left_join(divs_map, by = c("division"="division"))
+
+census_joined
+
+```
+
+```{r}
+a <- census_joined %>%   
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(aes(fill = 1-enslaved_pct), size = .1) +
+  facet_wrap(~year, nrow = 2, ncol = 4) +
+  scale_fill_gradient(
+    name = "Percentage of free Black Americans",
+    low = "#140E00",
+    high = "#FFC857",
+    breaks = c(0,0.25,0.5,0.75,1),
+    labels = c("","","","","100%")
+  )+
+  labs(
+    title = "In Chains",
+    subtitle = "Free Black Americans as a percentage of all Black Americans in 
+    US Census data at division level\n
+    \n"
+  )+
+  theme_void()+
+  theme(
+    plot.margin=unit(c(1,1,1,1),"cm"),
+    plot.background = element_rect(fill = '#111111'),
+    plot.title = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 20, 
+      family = "Montserrat", 
+      color = "#ffffff"
+    ),
+    plot.subtitle = element_text(
+      hjust = 0.5,
+      face = "italic",
+      size = 7, 
+      family = "Montserrat", 
+      color = "#ffffff"
+    ),
+    legend.position = "bottom",
+    legend.title = element_text(size = 5),
+    text = element_text(size = 10, family = "Montserrat",
+      face = "italic", color = "#ffffff"),
+    legend.text = element_text(
+      size = 5, 
+      family = "sans", 
+      color = "#ffffff",
+      face = "italic"
+    )
+  )+
+  guides(fill = 
+            guide_colorbar(
+              barwidth = 12, 
+              barheight = .2,
+              label.hjust = 1,
+              title.vjust = 6,
+              ticks = TRUE,
+              ticks.colour = "white",
+              ticks.linewidth = 0.5,
+              title.position = "bottom")
+  )
+
+a
+```
+
+```{r}
+ggsave
+ggsave("200619-outplot.png", plot = a)
+```
+
+
