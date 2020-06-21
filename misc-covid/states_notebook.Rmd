@@ -6,6 +6,7 @@ output: ''
 ---
 
 ```{r}
+library(ggrepel)
 library(tidyverse)
 library(lubridate)
 library(USAboundaries)
@@ -21,6 +22,8 @@ library(schoolmath)
 coviddata <- readr::read_csv('https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv')
 states <- readr::read_csv('http://www2.census.gov/programs-surveys/popest/datasets/2010-2019/national/totals/nst-est2019-alldata.csv?#')
 lockdown <- readr::read_csv('lockdown.csv')
+spending <- readr::read_csv('health_spending.csv')
+statename <- readr::read_csv('statename.csv')
 ```
 
 ```{r}
@@ -255,7 +258,7 @@ p2 <- all %>%
   )+
   labs(
     title = "Reopening Blues: New Deaths",
-    subtitle = "COVID data on daily new deaths, 7-day averages, and state lockdown duration. Sources:@nytimes, @businessinsider, and @NBCNews \n
+    subtitle = "COVID data on daily new deaths, 7-day averages, and state lockdown duration. Sources: @nytimes, @businessinsider, and @NBCNews \n
     Aggregated and visualised by @RobertBui7, June 21, 2020. \n",
     linetype = "Orange line denotes state lockdown orders."
   )+
@@ -320,11 +323,142 @@ p2 <- all %>%
   )
 ```
 
-
-
 ```{r fig.height=40, fig.width=15}
 ggsave("200621-outplot-cases.png", plot = p1, width = 15, height = 40, dpi = 120, units = "in", device='png')
 ggsave("200621-outplot-deaths.png", plot = p2, width = 15, height = 40, dpi = 120, units = "in", device='png')
 ```
+
+```{r}
+spending1 <- spending %>% 
+  mutate(
+    spend = as.numeric(substr(`Health Spending per Capita`, start = 2,stop = 6))
+  ) %>% 
+  select(
+    State = Location,
+    `Per Capita Spending` = spend
+  )
+```
+
+
+
+
+```{r fig.height=7.55, fig.width=12}
+p3 <- states %>% 
+  select(
+    fips = STATE,
+    State = NAME,
+    pop19 = POPESTIMATE2019
+  ) %>% 
+  right_join(coviddata) %>% 
+  filter(
+    date == "2020-06-18",
+    !State %in% c("Guam","Virgin Islands","Northern Mariana Islands","Puerto Rico")
+  ) %>% 
+  mutate(
+    Fatalities = deaths / pop19 * 100000,
+    Hospitalisations = cases / pop19 * 100000
+  ) %>%  
+  select(
+    State, Fatalities, Hospitalisations
+  ) %>% 
+  pivot_longer(
+    -State,
+    names_to = "Type",
+    values_to = "Rate out of 100k people"
+  ) %>% 
+  left_join(spending1) %>% 
+  left_join(statename) %>% 
+  select(
+    state = Code,
+    Type,
+    `Rate out of 100k people`,
+    `Per Capita Spending`
+  ) %>% 
+  ggplot()+
+  geom_text_repel(
+    aes(
+      x = `Rate out of 100k people`,
+      y = `Per Capita Spending`,
+      label = state
+    ),
+    color = "#FFD700",
+    point.padding = NA
+  )+
+  scale_x_continuous(trans="log10")+
+  facet_wrap(~paste(Type, "\n"), scales = "free")+
+  theme_void()+
+  labs(
+    title = "Healthcare Spending Against COVID",
+    subtitle = "Data on COVID rate of hospitalisation and fatalities out of 100000 people, mapped against per capita healthcare expenditure. \n
+    Sources: @nytimes and The Centers for Medicare and Medicaid Services
+    Aggregated and visualised by @RobertBui7, June 21, 2020. \n",
+    linetype = "Orange line denotes state lockdown orders.",
+    x = "\n Cases out of 100k total population (log10 scale)",
+    y = "Healthcare spending per capita \n"
+  )+
+  theme(
+    aspect.ratio=1,
+    text = element_text(size = 10, family = "Montserrat",
+      face = "italic", color = "#ffffff"),
+    
+    
+    axis.title.x = element_text(),
+    axis.title.y = element_text(angle = 90),
+    axis.ticks.y = element_line(
+      color = "#ffffff",
+      size = .15 
+    ),
+    axis.text.x = element_text(
+      margin = margin(3,3,3,3),
+      hjust = .5
+    ),
+    axis.text.y = element_text(
+      margin = margin(3,3,3,3),
+      hjust = 1
+    ),
+    
+    panel.spacing.y = unit(4, "lines"),
+    panel.spacing.x = unit(1, "lines"),
+    panel.background = element_rect(fill = '#111111'),
+    
+    plot.margin=unit(c(1,1,1,1),"cm"),
+    plot.background = element_rect(fill = '#111111'),
+    plot.title = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 20, 
+      family = "Montserrat", 
+      color = "#ffffff"
+    ),
+    plot.subtitle = element_text(
+      hjust = 0.5,
+      face = "italic",
+      size = 8, 
+      family = "Montserrat", 
+      color = "#ffffff"
+    ),
+    
+    legend.position = "bottom",
+    legend.title = element_text(size = 9),
+    legend.text = element_text(
+      size = 9, 
+      family = "sans", 
+      color = "#ffffff",
+      face = "italic"
+    ),
+    
+    strip.text = element_text(
+      size = 13, family = "Montserrat",
+      face = "bold", color = "#ffffff"
+    ),
+    strip.placement = "outside"
+  )
+
+p3
+
+ggsave("200621-outplot-spending.png", plot = p3)
+
+```
+
 
 
