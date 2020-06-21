@@ -1,0 +1,330 @@
+---
+title: "covid_notebook"
+author: "bobbytables"
+date: "6/20/2020"
+output: ''
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(USAboundaries)
+library(sf)
+library(plotly)
+library(ggthemes)
+library(viridis)
+library(zoo)
+library(schoolmath)
+```
+
+```{r} 
+coviddata <- readr::read_csv('https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv')
+states <- readr::read_csv('http://www2.census.gov/programs-surveys/popest/datasets/2010-2019/national/totals/nst-est2019-alldata.csv?#')
+lockdown <- readr::read_csv('lockdown.csv')
+```
+
+```{r}
+all0 <-states %>% 
+  select(
+    fips = STATE,
+    state = NAME,
+    pop19 = POPESTIMATE2019
+  ) %>% 
+  right_join(coviddata) %>% 
+  arrange(state,date) %>% 
+  filter(
+    !state %in% c("Guam","Virgin Islands","Northern Mariana Islands","Puerto Rico")
+  ) %>% 
+  mutate(
+    newdeaths = case_when(
+      state != lag(state,n=1L) ~ deaths,
+      state == lag(state,n=1L) ~ deaths-lag(deaths,n=1L)
+    ),
+    newcases = case_when(
+      state != lag(state,n=1L) ~ cases,
+      state == lag(state,n=1L) ~ cases-lag(cases,n=1L)
+    )
+  ) %>% 
+  mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>% 
+  mutate(
+    week = week(date)
+  ) %>% 
+  mutate(
+    c7 = case_when(
+      state != lag(state,1L) | 
+        state != lag(state,2L) | 
+        state != lag(state,3L) |
+        state != lag(state,4L) |
+        state != lag(state,5L) |
+        state != lag(state,6L) ~ 0,
+      state == lag(state,1L) &
+        state == lag(state,1L) &
+        state == lag(state,1L) &
+        state == lag(state,1L) &
+        state == lag(state,1L) &
+        state == lag(state,1L) ~ rollmean(newcases,7,na.pad=TRUE, align="right")
+    ),
+    d7 = case_when(
+      state != lag(state,1L) | 
+        state != lag(state,2L) | 
+        state != lag(state,3L) |
+        state != lag(state,4L) |
+        state != lag(state,5L) |
+        state != lag(state,6L) ~ 0,
+      state == lag(state,1L) &
+        state == lag(state,1L) &
+        state == lag(state,1L) &
+        state == lag(state,1L) &
+        state == lag(state,1L) &
+        state == lag(state,1L) ~ rollmean(newdeaths,7,na.pad=TRUE, align="right")
+    )
+  ) %>% 
+  mutate_if(is.numeric, ~replace(., is.na(.), 0)) %>% 
+  mutate_if(is.numeric, ~replace(., is.negative(.), 0))
+
+all0
+```
+
+
+```{r}
+week <- all0 %>% 
+  group_by(state,week) %>% 
+  summarise(
+    wdeaths = sum(newdeaths),
+    wcases = sum(newcases)
+  )
+
+all <- all0 %>% 
+  left_join(week, by=c("state","week")) %>% 
+  left_join(lockdown) %>% 
+  mutate(
+    begin = mdy(begin),
+    end = mdy(end)
+  ) %>% 
+  mutate_if(is.numeric, ~replace(., is.negative(.), 0))
+```
+```{r}
+all
+```
+
+
+```{r fig.height=40, fig.width=15}
+p1 <- all %>% 
+  #filter(state == "Alabama") %>% 
+  ggplot()+
+  geom_col(
+    aes(
+      x = date,
+      y = newcases
+    ),
+    color = "#EBEBEB",
+    fill = "#EBEBEB",
+    alpha = 1,
+    size = .5
+  )+
+  geom_line(
+    aes(
+      x = date,
+      y = c7,
+      lty = '7-day Average of new COVID cases'
+    ),
+    color = "#FFD700",
+    size = 1.6
+  )+ 
+  geom_segment(
+    aes(x = begin, xend = end, y = -0.5, yend = -0.5),
+    show.legend = F,
+    color="#F6511D",
+    size = 0.8,
+    arrow = arrow(length=unit(.2, "lines"), angle = 90, ends = "both", type = "open"),
+    arrow.fill = "#F6511D"
+  )+
+  #geom_segment(aes(x = end),linetype='dashed',color="#F6511D")+ 
+  #geom_text(aes(x = as.Date("2020-03-10"), label = type), nudge_x = 10, nudge_y = 10)+
+  facet_wrap(~paste(state, "\n"), 
+             ncol = 3,
+             scales = "free"
+  )+
+  scale_y_continuous(
+    n.breaks = 3 
+  )+
+  labs(
+    title = "Reopening Blues: New Cases",
+    subtitle = "COVID data on daily new cases, 7-day averages, and state lockdown duration. Sources:@nytimes, @businessinsider, and @NBCNews \n
+    Aggregated and visualised by @RobertBui7, June 21, 2020. \n",
+    linetype = "Orange line denotes state lockdown orders."
+  )+
+  theme_void()+
+  theme(
+    aspect.ratio=0.2,
+    text = element_text(size = 10, family = "Montserrat",
+      face = "italic", color = "#ffffff"),
+    
+    axis.ticks.y = element_line(
+      color = "#ffffff",
+      size = .15 
+    ),
+    axis.text.x = element_text(
+      margin = margin(3,3,3,3),
+      hjust = .5
+    ),
+    axis.text.y = element_text(
+      margin = margin(3,3,3,3),
+      hjust = 1
+    ),
+    
+    panel.spacing.y = unit(4, "lines"),
+    panel.spacing.x = unit(1, "lines"),
+    panel.grid.major.y = element_line(
+      linetype = "dashed",
+      color = "#ffffff",
+      size = .05
+    ),
+    
+    plot.margin=unit(c(1,1,1,1),"cm"),
+    plot.background = element_rect(fill = '#111111'),
+    plot.title = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 20, 
+      family = "Montserrat", 
+      color = "#ffffff"
+    ),
+    plot.subtitle = element_text(
+      hjust = 0.5,
+      face = "italic",
+      size = 10, 
+      family = "Montserrat", 
+      color = "#ffffff"
+    ),
+    
+    legend.position = "bottom",
+    legend.title = element_text(size = 9),
+    legend.text = element_text(
+      size = 9, 
+      family = "sans", 
+      color = "#ffffff",
+      face = "italic"
+    ),
+    
+    strip.text = element_text(
+      size = 13, family = "Montserrat",
+      face = "bold", color = "#ffffff"
+    ),
+    strip.placement = "outside"
+  )
+
+p2 <- all %>% 
+  #filter(state == "Alabama") %>% 
+  ggplot()+
+  geom_col(
+    aes(
+      x = date,
+      y = newdeaths
+    ),
+    color = "#EBEBEB",
+    fill = "#EBEBEB",
+    alpha = 1,
+    size = .5
+  )+
+  geom_line(
+    aes(
+      x = date,
+      y = d7,
+      lty = '7-day Average of new COVID deaths'
+    ),
+    color = "#FFD700",
+    size = 1.6
+  )+ 
+  geom_segment(
+    aes(x = begin, xend = end, y = -0, yend = -0),
+    show.legend = F,
+    color="#F6511D",
+    size = 0.8,
+    arrow = arrow(length=unit(.2, "lines"), angle = 90, ends = "both", type = "open"),
+    arrow.fill = "#F6511D"
+  )+
+  #geom_segment(aes(x = end),linetype='dashed',color="#F6511D")+ 
+  #geom_text(aes(x = as.Date("2020-03-10"), label = type), nudge_x = 10, nudge_y = 10)+
+  facet_wrap(~paste(state, "\n"), 
+             ncol = 3,
+             scales = "free"
+  )+
+  scale_y_continuous(
+    n.breaks = 3 
+  )+
+  labs(
+    title = "Reopening Blues: New Deaths",
+    subtitle = "COVID data on daily new deaths, 7-day averages, and state lockdown duration. Sources:@nytimes, @businessinsider, and @NBCNews \n
+    Aggregated and visualised by @RobertBui7, June 21, 2020. \n",
+    linetype = "Orange line denotes state lockdown orders."
+  )+
+  theme_void()+
+  theme(
+    aspect.ratio=0.2,
+    text = element_text(size = 10, family = "Montserrat",
+      face = "italic", color = "#ffffff"),
+    
+    axis.ticks.y = element_line(
+      color = "#ffffff",
+      size = .15 
+    ),
+    axis.text.x = element_text(
+      margin = margin(3,3,3,3),
+      hjust = .5
+    ),
+    axis.text.y = element_text(
+      margin = margin(3,3,3,3),
+      hjust = 1
+    ),
+    
+    panel.spacing.y = unit(4, "lines"),
+    panel.spacing.x = unit(1, "lines"),
+    panel.grid.major.y = element_line(
+      linetype = "dashed",
+      color = "#ffffff",
+      size = .05
+    ),
+    
+    plot.margin=unit(c(1,1,1,1),"cm"),
+    plot.background = element_rect(fill = '#111111'),
+    plot.title = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 20, 
+      family = "Montserrat", 
+      color = "#ffffff"
+    ),
+    plot.subtitle = element_text(
+      hjust = 0.5,
+      face = "italic",
+      size = 10, 
+      family = "Montserrat", 
+      color = "#ffffff"
+    ),
+    
+    legend.position = "bottom",
+    legend.title = element_text(size = 9),
+    legend.text = element_text(
+      size = 9, 
+      family = "sans", 
+      color = "#ffffff",
+      face = "italic"
+    ),
+    
+    strip.text = element_text(
+      size = 13, family = "Montserrat",
+      face = "bold", color = "#ffffff"
+    ),
+    strip.placement = "outside"
+  )
+```
+
+
+
+```{r fig.height=40, fig.width=15}
+ggsave("200621-outplot-cases.png", plot = p1, width = 15, height = 40, dpi = 120, units = "in", device='png')
+ggsave("200621-outplot-deaths.png", plot = p2, width = 15, height = 40, dpi = 120, units = "in", device='png')
+```
+
+
