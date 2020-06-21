@@ -154,7 +154,7 @@ p1 <- all %>%
   labs(
     title = "Reopening Blues: New Cases",
     subtitle = "COVID data on daily new cases, 7-day averages, and state lockdown duration. Sources:@nytimes, @businessinsider, and @NBCNews \n
-    Aggregated and visualised by @RobertBui7, June 21, 2020. \n",
+    Aggregated and visualised by @robert_b_, June 21, 2020. \n",
     linetype = "Orange line denotes state lockdown orders."
   )+
   theme_void()+
@@ -259,7 +259,7 @@ p2 <- all %>%
   labs(
     title = "Reopening Blues: New Deaths",
     subtitle = "COVID data on daily new deaths, 7-day averages, and state lockdown duration. Sources: @nytimes, @businessinsider, and @NBCNews \n
-    Aggregated and visualised by @RobertBui7, June 21, 2020. \n",
+    Aggregated and visualised by @robert_b_, June 21, 2020. \n",
     linetype = "Orange line denotes state lockdown orders."
   )+
   theme_void()+
@@ -391,7 +391,7 @@ p3 <- states %>%
     title = "Healthcare Spending Against COVID",
     subtitle = "Data on COVID rate of hospitalisation and fatalities out of 100000 people, mapped against per capita healthcare expenditure. \n
     Sources: @nytimes and The Centers for Medicare and Medicaid Services
-    Aggregated and visualised by @RobertBui7, June 21, 2020. \n",
+    Aggregated and visualised by @robert_b_, June 21, 2020. \n",
     linetype = "Orange line denotes state lockdown orders.",
     x = "\n Cases out of 100k total population (log10 scale)",
     y = "Healthcare spending per capita \n"
