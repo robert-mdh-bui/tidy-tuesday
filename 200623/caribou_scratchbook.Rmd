@@ -8,18 +8,17 @@ output: ''
 ```{r}
 library(tidyverse)
 library(devtools)
-```
-
-
-```{r}
-library(moveVis)
-library(move)
+library(maps)
+library(ggthemes)
+library(gganimate)
+library(ggmap)
 ```
 
 ```{r}
 individuals <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-06-23/individuals.csv')
 locations <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-06-23/locations.csv')
 ```
+
 ```{r}
 individuals %>% 
   ggplot()+
@@ -28,5 +27,29 @@ individuals %>%
       x = sex
     )
   )
+```
+```{r}
+world <- get_stamenmap(
+  bbox = c(
+    left = -124,
+    bottom = 52,
+    right = -119,
+    top = 58
+  ),
+  zoom = 2,
+  maptype = "terrain"
+)
+
+map <- ggmap(world) + 
+  geom_point(
+    data = locations,
+    aes(
+      x = longitude, 
+      y = latitude
+    )
+  )
+
+gganimate(map) + 
+  transition_time(timestamp)
 ```
 
