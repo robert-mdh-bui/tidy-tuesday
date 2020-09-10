@@ -111,13 +111,13 @@ fr %>%
 p <- fr %>% 
   ggplot(aes(x= cumsum,y=rank))+
   geom_barh(stat = "identity", aes(width=.04,fill=as.factor(speaker)),color="#000000")+  
-  geom_image(aes(x=cumsum,image = img,y=rank-.3),size=.14)+
+  geom_image(aes(x=cumsum,image = img,y=rank-.3),size=.10)+
   #geom_point(aes(x=cumsum,image = img),size=28,alpha=.3)+
   
   geom_text(aes(x=0,fill=as.factor(speaker), label = paste(speaker, " "),color=speaker),vjust=.5,hjust=1,fontface='bold') +
   
-  geom_text_repel(aes(x=cumsum,label=paste(cumsum, "      ", sep=""),color=speaker),vjust=.5,hjust = 1,fontface='bold',size = 9,nudge_x=-20,nudge_y=.22,force=0,segment.alpha=0)+
-  geom_text_repel(aes(x=cumsum,label=paste("+",step, "              ",sep=""),color=speaker),vjust=.5,hjust = 1,fontface='bold.italic',nudge_x=-20,nudge_y=-.1,force=0,segment.alpha=0)+
+  geom_text_repel(aes(x=cumsum,label=paste(cumsum, "   ", sep=""),color=speaker),vjust=.5,hjust = 1,fontface='bold',size = 9,nudge_x=-1,nudge_y=.28,force=0,segment.alpha=0)+
+  geom_text_repel(aes(x=cumsum,label=paste("+",step, "        ",sep=""),color=speaker),vjust=.5,hjust = 1,fontface='bold.italic',nudge_x=-1,nudge_y=-.12,force=0,segment.alpha=0)+
   scale_y_reverse()+
   #scale_x_continuous(trans='log2')+
   coord_cartesian(clip="off",expand=F)+ # disallows clipping of the axes
@@ -130,27 +130,27 @@ p <- fr %>%
   
   theme(
     
-    plot.margin=unit(c(3.5,7,3.5,7),"cm"),
+    plot.margin=unit(c(1.5,2.8,1.5,3.1),"cm"),
     plot.background = element_rect(fill = '#030a16'),
     plot.title = element_text(
       hjust = 0.5,
       face = "bold",
-      size = 48, 
+      size = 24, 
       family = "friends_script", 
       color = "#ffffff"
     ),
     plot.subtitle = element_text(
       hjust = 0.5,
-      size = 16, 
-      family = "Segoe UI Light", 
+      size = 9, 
+      family = "Montserrat", 
       color = "#ffffff"
     ),
     
-    text = element_text(size = 10, family = "Segoe UI Semilight", color = "#ffffff"),
+    text = element_text(size = 11, family = "Montserrat", color = "#ffffff"),
     
     axis.text.y = element_blank(),
     axis.text.x = element_text(size = 8, color="#ffffff"),
-    axis.title.x = element_text(size = 8, color="#ffffff"),
+    axis.title.x = element_text(size = 8, color="#ffffff", face="italic"),
     axis.title.y = element_text(size = 8, color="#ffffff", face="bold"),
 
     
@@ -159,7 +159,7 @@ p <- fr %>%
 
     panel.grid.minor = element_blank(),
     
-    strip.text = element_text(size = 14,face="bold", color="#ffffff"),
+    strip.text = element_text(size = 6,face="bold", color="#ffffff"),
     
     legend.position = "none"
   )+
@@ -184,15 +184,15 @@ p <- fr %>%
 ```{r}
 animate(
   p,
-  nframes = 2,
-  width = 900,
-  height = 900,
+  nframes = 12,
+  width = 480,
+  height = 480,
   type = "cairo"
 )
 ```
 
 ```{r}
-anim_fps = 60
+anim_fps = 30
 start_pause = anim_fps/4
 end_pause = anim_fps*2
 ```
@@ -215,15 +215,18 @@ a <- animate(
 a 
 
 anim_save("output.mp4", a)
+```
 
+
+```{r}
 b <- animate(
   p,
   start_pause = start_pause,
   end_pause = end_pause,
   nframes = anim_fps*anim_steps/10 + start_pause + end_pause,
   renderer = gifski_renderer(),
-  width = 1000,
-  height = 1000,
+  width = 480,
+  height = 480,
   fps = anim_fps,
   type = "cairo"
 )
