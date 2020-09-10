@@ -1,0 +1,234 @@
+---
+title: "animated"
+output: html_document
+---
+
+```{r}
+library(png)
+library(gifski)
+library(gganimate)
+library(ggthemes)
+library(knitr)
+library(leaflet)
+library(scales)
+library(tidyverse)
+library(ggimage)
+library(zoo)
+library(ggstance)
+library(ggrepel)
+library(Cairo)
+library(extrafont)
+```
+
+```{r}
+loadfonts(device="win")
+library(ggplot2) # calling ggplot2 again outside of tidyverse because extrafonts' initialisation often needs ggplot2 to be reloaded
+```
+
+```{r eval=FALSE, include=FALSE}
+# QUERY RATE LIMITED - DON'T RERUN TOO OFTEN
+
+tuesdata <- tidytuesdayR::tt_load(2020, week = 37)
+```
+
+```{r}
+friends <- tuesdata$friends %>% mutate(epid = season * 100 + episode)
+friends_info <-tuesdata$friends_info %>% mutate(epid = season * 100 + episode)
+friends_emotions <- tuesdata$friends_emotions %>% mutate(epid = season * 100 + episode)
+
+friends$speaker[friends$speaker == "Chandlers"] <- "Chandler Bing"
+
+maincast <- friends %>% 
+  group_by(speaker) %>% 
+  summarise(
+    n=n()
+  ) %>% 
+  arrange(desc(n)) %>% 
+  head(6) %>% 
+  .$speaker %>% 
+  as.vector()
+
+cols <- c("Ross Geller" = "#f0f921", 
+          "Rachel Green" = "#b12a90", 
+          "Chandler Bing" = "#6a00a7", 
+          "Phoebe Buffay" = "#e16362",
+          "Monica Geller" = "#fca636", 
+          "Joey Tribbiani" = "#fdfdd7"
+          )
+
+imagefiles <- data.frame(speaker = maincast, 
+                         img = c("rachel.png","ross.png","chandler.png","monica.png","joey.png","phoebe.png")
+                         )
+```
+
+
+```{r}
+fr <- friends %>% 
+  mutate(
+    wcount = str_count(text, '\\w+') 
+  ) %>% 
+  filter(speaker %in% maincast) %>% 
+  group_by(epid,speaker) %>% 
+  summarise(step=sum(wcount)) %>% 
+  group_by(speaker) %>% 
+  mutate(
+    cumsum=cumsum(step)
+  ) %>% 
+  select(
+    epid, speaker, cumsum, step
+  ) %>%
+  arrange(epid) %>% 
+  bind_rows(
+    .,
+    data.frame(epid = as.integer(100),speaker = maincast,cumsum = as.integer(0), step = as.integer(0))
+  ) %>% 
+  arrange(epid) %>% 
+  na.locf() %>% 
+  group_by(epid) %>% 
+  mutate(rank=rank(-cumsum,ties.method="first")) %>% 
+  ungroup() %>% 
+  mutate(
+    epid = str_pad(epid, 4, pad = "0")
+  ) %>% 
+  left_join(.,imagefiles)
+  
+fr
+```
+
+```{r}
+anim_steps <- length(fr$epid)/length(maincast)
+```
+
+```{r}
+fr %>% 
+  arrange(desc(
+    paste("ID:",epid," | Season ",floor(as.integer(epid)/100)," Ep ",as.integer(epid) %% 100, sep = "")
+  ))
+```
+
+
+```{r}
+p <- fr %>% 
+  ggplot(aes(x= cumsum,y=rank))+
+  geom_barh(stat = "identity", aes(width=.04,fill=as.factor(speaker)),color="#000000")+  
+  geom_image(aes(x=cumsum,image = img,y=rank-.3),size=.14)+
+  #geom_point(aes(x=cumsum,image = img),size=28,alpha=.3)+
+  
+  geom_text(aes(x=0,fill=as.factor(speaker), label = paste(speaker, " "),color=speaker),vjust=.5,hjust=1,fontface='bold') +
+  
+  geom_text_repel(aes(x=cumsum,label=paste(cumsum, "      ", sep=""),color=speaker),vjust=.5,hjust = 1,fontface='bold',size = 9,nudge_x=-20,nudge_y=.22,force=0,segment.alpha=0)+
+  geom_text_repel(aes(x=cumsum,label=paste("+",step, "              ",sep=""),color=speaker),vjust=.5,hjust = 1,fontface='bold.italic',nudge_x=-20,nudge_y=-.1,force=0,segment.alpha=0)+
+  scale_y_reverse()+
+  #scale_x_continuous(trans='log2')+
+  coord_cartesian(clip="off",expand=F)+ # disallows clipping of the axes
+  guides(color = F, fill = F) +
+  theme_minimal()+
+  scale_fill_manual(values=cols)+
+  scale_color_manual(values=cols)+
+  
+  ylim(6.7,0.3)+
+  
+  theme(
+    
+    plot.margin=unit(c(3.5,7,3.5,7),"cm"),
+    plot.background = element_rect(fill = '#030a16'),
+    plot.title = element_text(
+      hjust = 0.5,
+      face = "bold",
+      size = 48, 
+      family = "friends_script", 
+      color = "#ffffff"
+    ),
+    plot.subtitle = element_text(
+      hjust = 0.5,
+      size = 16, 
+      family = "Segoe UI Light", 
+      color = "#ffffff"
+    ),
+    
+    text = element_text(size = 10, family = "Segoe UI Semilight", color = "#ffffff"),
+    
+    axis.text.y = element_blank(),
+    axis.text.x = element_text(size = 8, color="#ffffff"),
+    axis.title.x = element_text(size = 8, color="#ffffff"),
+    axis.title.y = element_text(size = 8, color="#ffffff", face="bold"),
+
+    
+    panel.grid.major.x = element_line(linetype = "dotted" , colour="#3A506B", size = .12),
+    panel.grid.major.y = element_blank(),
+
+    panel.grid.minor = element_blank(),
+    
+    strip.text = element_text(size = 14,face="bold", color="#ffffff"),
+    
+    legend.position = "none"
+  )+
+  guides(
+    color = FALSE,
+    fill = guide_legend(reverse=T)
+  ) +
+  transition_states(states = paste("ID:",epid," | Season ",floor(as.integer(epid)/100)," Ep ",as.integer(epid) %% 100, sep = ""),transition_length = 6, state_length = 2)+
+  enter_fade()+
+  exit_fade()+
+  view_follow(fixed_y=T)+ 
+  ease_aes('sine-in-out')+
+  labs(title = "Friends' the Word \n",
+       subtitle = "\n \n 0Of the six main characters, who says the most words throughout 'Friends'? 
+       Data by @Emil_Hvitfeldt. Visualised by @robert_b_ \n \n \n \n",
+       x="\n \n 0Words of dialogue spoken",
+       y="",
+       caption='{closest_state}')
+```
+
+
+```{r}
+animate(
+  p,
+  nframes = 2,
+  width = 900,
+  height = 900,
+  type = "cairo"
+)
+```
+
+```{r}
+anim_fps = 60
+start_pause = anim_fps/4
+end_pause = anim_fps*2
+```
+
+
+```{r}
+a <- animate(
+  p,
+  start_pause = start_pause,
+  end_pause = end_pause,
+  fps = anim_fps,
+  nframes = anim_fps*anim_steps/10 + start_pause + end_pause,
+  renderer = ffmpeg_renderer(),
+  width = 1000,
+  height = 1000,
+  type = "cairo",
+  res = 72
+)
+
+a 
+
+anim_save("output.mp4", a)
+
+b <- animate(
+  p,
+  start_pause = start_pause,
+  end_pause = end_pause,
+  nframes = anim_fps*anim_steps/10 + start_pause + end_pause,
+  renderer = gifski_renderer(),
+  width = 1000,
+  height = 1000,
+  fps = anim_fps,
+  type = "cairo"
+)
+
+b 
+
+anim_save("output.gif", b)
+```

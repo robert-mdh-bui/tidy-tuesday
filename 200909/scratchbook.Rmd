@@ -1,0 +1,90 @@
+---
+title: "friends"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(stringr)
+library(caret)
+```
+
+```{r}
+# QUERY RATE LIMITED - DON'T RERUN TOO OFTEN
+
+tuesdata <- tidytuesdayR::tt_load(2020, week = 37)
+```
+
+```{r}
+friends <- tuesdata$friends %>% mutate(epid = season * 100 + episode)
+friends_info <-tuesdata$friends_info %>% mutate(epid = season * 100 + episode)
+friends_emotions <- tuesdata$friends_emotions %>% mutate(epid = season * 100 + episode)
+
+friends$speaker[friends$speaker == "Chandlers"] <- "Chandler Bing"
+
+maincast <- friends %>% 
+  group_by(speaker) %>% 
+  summarise(
+    n=n()
+  ) %>% 
+  arrange(desc(n)) %>% 
+  head(6) %>% 
+  .$speaker %>% 
+  as.vector()
+```
+
+```{r}
+rating <- friends_info %>% 
+  mutate(
+    rating_norm = scale(imdb_rating),
+    rating = imdb_rating
+  ) %>% 
+  select(-c(title,written_by,directed_by,imdb_rating,episode))
+
+rating
+```
+
+
+```{r}
+friends %>% 
+  #filter(speaker %in% maincast) %>% 
+  group_by(epid,speaker) %>% 
+  summarise(
+    n=n()
+  ) %>% 
+  mutate(epfreq = n/sum(n)) %>% 
+  filter(speaker %in% maincast) %>% 
+  left_join(rating) %>% 
+  mutate(
+    wscore = epfreq*rating_norm
+  )
+```
+
+```{r}
+prelm <- friends %>% 
+  #filter(speaker %in% maincast) %>% 
+  group_by(epid,speaker) %>% 
+  summarise(
+    n=n()
+  ) %>% 
+  mutate(epfreq = n/sum(n)) %>%
+  filter(speaker %in% maincast) %>%
+  mutate(
+    speaker = str_extract(speaker, '\\w*')
+  ) %>% 
+  pivot_wider(
+    id_cols = epid,
+    names_from = speaker,
+    names_prefix = "lines_",
+    values_from = epfreq
+  ) %>% 
+  left_join(rating) 
+
+prelm
+```
+
+```{r}
+glm(rating ~ lines_Chandler+lines_Joey+lines_Monica+lines_Phoebe+lines_Rachel+lines_Ross,data=prelm)
+glm(rating_norm ~ lines_Chandler+lines_Joey+lines_Monica+lines_Phoebe+lines_Rachel+lines_Ross,data=prelm)
+```
+
