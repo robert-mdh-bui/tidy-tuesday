@@ -1,0 +1,204 @@
+---
+title: "kids"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidytuesdayR)
+library(scales)
+library(extrafont)
+library(Cairo)
+
+loadfonts(device="win")
+library(ggplot2) # calling ggplot2 again outside of tidyverse because extrafonts' initialisation often needs ggplot2 to be reloaded
+
+tuesdata <- tidytuesdayR::tt_load('2020-09-15')
+tuesdata <- tidytuesdayR::tt_load(2020, week = 38)
+```
+
+```{r}
+kids <- tuesdata$kids
+```
+
+```{r}
+math <- read_csv("maths.csv") %>% 
+  mutate(
+    subj = "math"
+  )
+reading <- read_csv("reading.csv") %>% 
+  mutate(
+    subj = "reading"
+  )
+```
+
+
+```{r}
+outcome <- math %>% 
+  full_join(reading) %>% 
+  filter(
+    !state %in% c("DoDEA","National")
+  )
+outcome
+```
+```{r}
+composite <- outcome %>% 
+  select(year,state,avg,subj) %>% 
+  group_by(year,state) %>% 
+  summarise(
+    score = mean(avg)
+  ) %>% 
+  ungroup() %>% 
+  pivot_wider(
+    id_cols = state,
+    names_from = year,
+    names_prefix = "p",
+    values_from = score
+  ) %>% 
+  mutate(
+    delta = (p2017/p2003 - 1)*100
+  ) %>% 
+  select(state,delta)
+
+composite
+```
+
+
+```{r}
+s_comp <- composite %>% 
+  filter(
+    scoretype %in% c("avg","p10","p90")
+  ) %>% 
+  pivot_wider(
+    id_cols = c(year,state),
+    names_from = scoretype,
+    values_from = composite
+  )
+```
+
+```{r}
+plotdata <- kids %>% 
+  filter(
+    variable == "PK12ed",
+    year %in% c("2002","2016")
+  ) %>% 
+  mutate(
+    year = year+1
+  ) %>% 
+  select(year,state,spend=inf_adj_perchild) %>% 
+  left_join(composite)
+
+labdt <- plotdata %>% 
+  group_by(state) %>% 
+  summarise(
+    labely = max(spend)
+  )
+
+plotdata <- plotdata %>% 
+  left_join(labdt)
+
+```
+
+```{r fig.height=12, fig.width=10}
+p <- plotdata %>% 
+  ggplot()+
+  coord_flip()+
+  geom_point(
+    aes(
+      x = fct_reorder(state,labely),
+      y = spend,
+      fill = as.factor(year)
+    ),
+    shape = 21,
+    stroke = 0,
+    alpha = .7,
+    size = 3.2
+  )+
+  geom_text(
+    aes(
+      x = fct_reorder(state,spend),
+      y = labely+.75,
+      label = paste(round(delta),"%",sep=""),
+      color = ifelse(delta < 0,"Lower Score","Higher Score")
+    )
+  )+
+
+  annotate("text",x = 24,y = 23,type="bold.italic",label = "Cost of",family = "Onyx",color = "#420039",size = 20,vjust=0,hjust=1)+
+  annotate("text",x = 20,y = 23,type="bold.italic",label = "the Learning Curve",family = "Onyx",color = "#420039",size = 20,vjust=0,hjust=1)+
+  annotate("text",x = 4,y = 23,family = "Segoe UI Light",color = "#420039",size = 3.4475,hjust=1,vjust=0,
+           label = "\n\n\nEducation spending change mapped against \nstudent outcome change between 2003-2017. \n\nEducation spending measured as state expenditure\n on K-12 education by state and year, in 2016-adjusted USD\n \nStudent outcome measured by percentage change in \n statewide average of Composite assessment score \nfor Mathematics and Reading, Grade 8.\n\nSpending data by #tidytuesday contributors.\n Student outcome data by Dep. of Education's\n National Center for Education Statistics.\nVisualised by @robert_b_"
+           )+
+  scale_fill_manual(values = c("#7E7F9A","#420039"),labels = c("Spending 2002 - Outcome 2003","Spending 2016 - Outcome 2017"))+
+  scale_colour_manual(values = c("#8CCB67", "#EB9486"),labels = c("Average Academic Score Fell  ","Average Academic Score Rose  "))+
+  theme_minimal()+
+  labs(
+    title = "",
+    subtitle = "",
+    x = "⚫                                                     ⚫ \n\n",
+    y = "\nSpending per child (in 2016-adjusted $1000s)",
+    color = "Outcome Change",
+    fill = "Year"
+  )+
+  theme(
+    
+    plot.margin=unit(c(-2,2,1.5,1),"cm"),
+    plot.background = element_rect(fill = '#F9F0C8'),
+    plot.title = element_text(
+      margin = margin(b = 0),
+      vjust = 0,
+      hjust = 1,
+      face = "bold",
+      size = 96, 
+      family = "Onyx", 
+      color = "#420039"
+    ),
+    plot.subtitle = element_text(
+      hjust = 0,
+      face = "italic",
+      size = 18, 
+      family = "Segoe UI Light", 
+      color = "#420039"
+    ),
+    
+    text = element_text(size = 10, family = "Segoe UI Light", color = "#420039"),
+    
+    axis.text.y = element_text(size = 8, color="#420039"),
+    axis.text.x = element_text(size = 8, color="#420039"),
+    axis.title.x = element_text(size = 12, color="#420039", face="bold.italic"),
+    axis.title.y = element_text(size = 24, color="#420039", face="bold"),
+
+    
+    #panel.grid.major.x = element_line(linetype = "dotted",colour="#AFB0C0", size = .001),
+    panel.grid.major.y = element_line(linetype = "dotted",colour="#AFB0C0", size = .1),
+    panel.grid.major.x = element_blank(),
+    #panel.grid.major.y = element_blank(),
+    
+    panel.grid.minor = element_blank(),
+    
+    strip.text = element_text(size = 14,face="bold", color="#ffffff"),
+    
+    legend.position = c(0.818, .678),
+    legend.box = "vertical",
+    legend.title = element_text(size = 14, color="#420039"),
+    legend.text = element_text(size = 8, color="#420039",face="italic"),
+    legend.background = element_rect(fill = "#fcf9e9")
+  )
+
+p
+```
+
+```{r fig.height=12, fig.width=10}
+p
+
+ggsave(
+  "eduspendingplot.png",
+  plot = p,
+  width = 10,
+  height = 12,
+  units = "in",
+  dpi = 300
+)
+```
+
+
+
