@@ -1,0 +1,585 @@
+---
+title: "lyrics"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(textdata)
+library(scales)
+library(extrafont)
+library(Cairo)
+library(cowplot)
+library(egg)
+library(ggrepel)
+library(ggtext)
+library(ggiraphExtra)
+library(htmltools)
+```
+
+```{r message=FALSE, warning=FALSE}
+loadfonts(device="win")
+library(ggplot2)
+
+data(stop_words)
+sentiments <- get_sentiments("bing")
+emotions <- get_sentiments("nrc")
+```
+
+```{r}
+
+beyonce_lyrics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-29/beyonce_lyrics.csv')
+taylor_swift_lyrics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-29/taylor_swift_lyrics.csv')
+sales <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-29/sales.csv')
+charts <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-09-29/charts.csv')
+
+```
+
+```{r}
+dil <- c("Crazy in Love (Ft. JAY-Z)",
+  "Naughty Girl", 
+  "Baby Boy (Ft. Sean Paul)",
+  "Hip Hop Star (Ft. Big Boi & Sleepy Brown)",
+  "Be With You",
+  "Me, Myself and I",
+  "Yes",
+  "Signs (Ft. Missy Elliott)",
+  "Speechless",
+  "That's How You Like It (Ft. JAY-Z)",
+  "The Closer I Get to You (Ft. Luther Vandross)",
+  "Dangerously In Love 2",
+  "Beyoncé Interlude",
+  "Gift from Virgo",
+  "Daddy",
+  "null",
+  "null",
+  "null"
+  )
+bda <- c(
+  "Déjà Vu (Ft. JAY-Z)",
+  "Get Me Bodied",
+  "Suga Mama",
+  "Upgrade U (Ft. JAY-Z)",
+  "Ring the Alarm",
+  "Kitty Kat",
+  "Freakum Dress",
+  "Green Light",
+  "Irreplaceable",
+  "Resentment",
+  "Listen",
+  "null",
+  "null",
+  "null",
+  "null",
+  "null",
+  "null",
+  "null"
+)
+isf <- c(
+  "If I Were a Boy",
+  "Halo",
+  "Disappear",
+  "Broken Hearted Girl",
+  "Ave Maria",
+  "Satellites",
+  "Save the Hero",
+  "Smash Into You",
+  "That's Why You're Beautiful",
+  "Single Ladies (Put a Ring on It)",
+  "Radio",
+  "Diva",
+  "Sweet Dreams",
+  "Video Phone",
+  "Hello",
+  "Ego",
+  "Scared of Lonely",
+  "Poison"
+)
+`4` <- c(
+  "Love on Top",
+  "Party (Ft. André 3000)",
+  "Schoolin' Life",
+  "Countdown",
+  "I Miss You",
+  "Dance for You",
+  "I Care",
+  "Rather Die Young",
+  "1+1",
+  "End of Time",
+  "Run the World (Girls)",
+  "Best Thing I Never Had",
+  "Start Over",
+  "I Was Here",
+  "null",
+  "null",
+  "null",
+  "null"
+)
+`Beyoncé` <- c(
+  "Pretty Hurts",
+  "Ghost",
+  "Haunted",
+  "Drunk in Love (Ft. JAY-Z)",
+  "Blow",
+  "No Angel",
+  "Yoncé",
+  "Partition",
+  "Jealous",
+  "Rocket",
+  "Mine (Ft. Drake)",
+  "XO",
+  "***Flawless (Ft. Chimamanda Ngozi Adichie)",
+  "Superpower (Ft. Frank Ocean)",
+  "Heaven",
+  "Blue (Ft. Blue Ivy Carter)",
+  "null",
+  "null"
+)
+Lemonade <- c(
+  "Pray You Catch Me",
+  "Hold Up",
+  "Don't Hurt Yourself (Ft. Jack White)",
+  "Sorry",
+  "6 Inch (Ft. The Weeknd)",
+  "Daddy Lessons",
+  "Love Drought",
+  "Sandcastles",
+  "Forward (Ft. James Blake)",
+  "Freedom (Ft. Kendrick Lamar)",
+  "All Night",
+  "Formation",
+  "Sorry",
+  "null",
+  "null",
+  "null",
+  "null",
+  "null"
+)
+
+bey_albums <- data.frame(
+  a = range(1:18),
+  dil,
+  bda,
+  isf,
+  `4`,
+  `Beyoncé`,
+  Lemonade
+) %>% 
+  pivot_longer(
+    cols = -a,
+    names_to = "album",
+    values_to = "song_name"
+  ) %>% 
+  select(-a) %>% 
+  filter(song_name != "null") %>% 
+  arrange(album) %>% 
+  mutate(
+    album = case_when(
+      album == "dil" ~ "Dangerously in Love",
+      album == "bda" ~ "B'Day",
+      album == "isf" ~ "I Am... Sasha Fierce",
+      album == "X4" ~ "4",
+      TRUE ~ album
+    )
+  ) %>% 
+  mutate(
+    song_name = str_squish(song_name)
+  )
+
+bey_albums
+```
+
+```{r}
+bey_year <- sales %>% 
+  filter(artist=="Beyoncé") %>% 
+  mutate(
+    year = substring(released, regexpr(",",released)+2,regexpr(",",released)+5)
+  ) %>% 
+  select(album=title,year) %>% 
+  distinct() %>% 
+  rbind(
+    c(
+      "Lemonade","2016"
+    )
+  )
+
+tay_year <- sales %>% 
+  filter(artist == "Taylor Swift") %>% 
+  mutate(
+    year = substring(released, regexpr(",",released)+2,regexpr(",",released)+5)
+  ) %>% 
+  select(album=title,year) %>% 
+  distinct()
+```
+
+```{r}
+alllyrics_bey <- beyonce_lyrics %>% 
+  mutate(
+    song_name = str_squish(song_name)
+  ) %>% 
+  right_join(bey_albums) %>% 
+  filter(is.na(album)!=T) %>% 
+  unnest_tokens(word,line) %>% 
+  left_join(bey_year) %>% 
+  select(artist = artist_name,
+         album = album,
+         title = song_name, 
+         word,
+         year
+         )
+
+alllyrics_tay <- taylor_swift_lyrics %>% 
+  mutate(
+    Album = case_when(
+      Album == "folklore" ~ "Folklore",
+      Album == "reputation" ~ "Reputation",
+      TRUE ~ Album
+    )
+  ) %>% 
+  select(artist = Artist,
+         album = Album,
+         title = Title,
+         lyrics = Lyrics) %>% 
+  unnest_tokens(word,lyrics)%>% 
+  left_join(tay_year) %>% 
+  select(artist,
+         album,
+         title, 
+         word,
+         year
+         )
+
+lyrics <- alllyrics_bey %>% rbind(alllyrics_tay)
+```
+```{r}
+lyr_emo <- lyrics %>% 
+  inner_join(emotions) %>% 
+  filter(
+    !sentiment %in% c("negative","positive",NA)
+  ) %>% 
+  group_by(artist,album,year,sentiment) %>% 
+  summarise(n=n()) %>% 
+  mutate(prop = n/sum(n))
+
+lyr_emo
+```
+```{r fig.height=15, fig.width=15}
+lyr_emo %>% 
+  pivot_wider(
+    id_cols = c(artist,album,year),
+    names_from = sentiment,
+    values_from = prop
+  ) %>% 
+  ggRadar(
+    aes(
+      group = album
+    )
+  )+
+  facet_wrap(~album)
+```
+
+```{r fig.height=8, fig.width=12}
+song_sentiment <- lyrics %>% 
+  inner_join(sentiments) %>% 
+  group_by(artist,title,sentiment) %>% 
+  summarise(n=n()) %>% 
+  pivot_wider(
+    id_cols = c(artist,title),
+    names_from = sentiment,
+    values_from = n
+  ) %>% 
+  mutate(
+    negative = replace_na(negative,0),
+    positive = replace_na(positive,0),
+    sent_score = positive-negative
+  )
+
+topbottom <- song_sentiment %>% group_by(artist) %>% top_n(10,sent_score) %>% 
+  rbind(song_sentiment %>% group_by(artist) %>% top_n(-10,sent_score)) %>% 
+  #rbind(song_sentiment %>% group_by(artist) %>% top_n(-10,abs(sent_score))) %>% 
+  mutate(
+    is_positive = case_when(
+      sent_score > 24 ~ 1,
+      sent_score < -6 ~ -1,
+      TRUE ~ 0
+    )
+  )
+```
+```{r fig.height=8, fig.width=12}
+p3 <- topbottom %>% 
+  ggplot(
+    aes(
+      x = fct_reorder(title,sent_score),
+      y = sent_score,
+      col = as.factor(is_positive),
+      fill = as.factor(is_positive)
+    )
+  )+
+  geom_col()+
+  geom_text(
+    aes(
+      y = sent_score + is_positive*30,
+      label = sent_score
+    )
+  )+
+  ylim(-300,200)+
+  facet_wrap(
+    as.factor(-is_positive)~artist,
+    scales = "free",
+    labeller = labeller()
+  )+
+  coord_flip()+
+  scale_fill_manual(values = c("#BC4B51","#70B77E"))+
+  scale_colour_manual(values = c("#BC4B51","#70B77E"))+
+  theme_void()+
+  theme(
+    
+    plot.margin=unit(c(t=0,r=3,b=2,l=2),"cm"),
+    
+    legend.position = "none",
+    plot.title = element_text(
+      margin = margin(b = 0,unit = "in"),
+      face = "bold",
+      size = 20,
+      hjust = 0,
+      family = "Newslab Bold", 
+      color = "#0B0A07"
+    ),
+    plot.subtitle = element_text(
+      face = "bold.italic",
+      size = 12, 
+      hjust = 0,
+      family = "Newslab", 
+      color = "#0B0A07"
+    ),
+    plot.caption = element_text(
+      face = "italic",
+      size = 12, 
+      hjust = 1,
+      family = "Newslab", 
+      color = "#0B0A07",
+      vjust = 1
+    ),
+    text = element_text(size = 10, hjust=1,family = "Newslab",color = "#0B0A07"),
+    
+    axis.text.y = element_text(size = 8, color="#0B0A07"),
+    axis.text.x = element_text(size = 8, color="#0B0A07"),
+    axis.title.x = element_text(size = 12, hjust=0.5, color="#0B0A07", face="bold.italic"),
+    axis.title.y = element_text(size = 24, color="#0B0A07", face="bold"),
+    strip.text.x = element_blank()
+  )+
+  labs(
+    subtitle = '\n\nFigure 3: Top and bottom 10 songs by Beyoncé and Taylor Swift, ranked by net sentiment.\nNet sentiment is calculated by net difference between positive and negative word count.\n\n',
+    caption = "\nData by TidyTuesday team, Rosie Baillie, and Dr. Sata Stoudt.\nSentiment data from Hu and Liu’s opinion lexicon and NRC word-emotion association lexicon. \nViz by @robert_b_",
+    x = "",
+    y = "\nSentiment Score (higher is more positive)"
+  )
+
+p3
+```
+```{r fig.height=8, fig.width=12}
+p2 <- lyrics %>% 
+  inner_join(sentiments) %>% 
+  group_by(artist,album,year,sentiment) %>% 
+  summarise(
+    n = n()
+  ) %>% 
+  pivot_wider(
+    id_cols = c(artist,album,year),
+    names_from = sentiment,
+    values_from = n
+  ) %>% 
+  mutate(
+    sent_score = positive - negative
+  ) %>% 
+  ggplot(
+    aes(
+      x = year,
+      y = sent_score,
+      col = artist,
+      fill = artist,
+      group = 1
+    ) 
+  )+
+  geom_point(size = 3,alpha=.5)+
+  geom_line(size = 1.5,alpha=.5)+
+  #geom_area(alpha=.1)+
+  geom_text_repel(
+    aes(
+      y = sent_score+5,
+      label = album
+    ),
+    face = "bold",
+    family = "Newslab",
+    color = "#0B0A07"
+  )+
+  facet_wrap(~artist,scales="free_x")+
+  scale_fill_manual(values = c("#FFA62B","#16697A"))+
+  scale_colour_manual(values = c("#FFA62B","#16697A"))+
+  labs(
+    title = "",
+    subtitle = "Figure 2: Main Albums released by Beyoncé and Taylor Swift, ranked by net sentiment.\nNet sentiment is calculated by net difference between positive and negative word count.\n",
+    #caption = "Data by TidyTuesday, viz by @robert_b_",
+    x = "",
+    y = "Sentiment Score   \n(Higher is more positive)  "
+  )+
+  theme_void()+
+  theme(
+
+    plot.margin=unit(c(t=0,r=2,b=0,l=2),"cm"),
+    
+    
+    legend.position = "none",
+    plot.title = element_text(
+      margin = margin(b = 0,unit = "in"),
+      face = "bold",
+      size = 20,
+      hjust = 0,
+      family = "Newslab Bold", 
+      color = "#0B0A07"
+    ),
+    plot.subtitle = element_text(
+      face = "bold.italic",
+      size = 12, 
+      hjust = 0,
+      family = "Newslab", 
+      color = "#0B0A07"
+    ),
+    plot.caption = element_text(
+      face = "italic",
+      size = 12, 
+      hjust = .5,
+      family = "Newslab", 
+      color = "#0B0A07",
+      vjust = 1
+    ),
+    text = element_text(size = 10, hjust=1,family = "Newslab",color = "#0B0A07"),
+    
+    axis.text.y = element_text(size = 8, color="#0B0A07"),
+    axis.text.x = element_text(size = 8, color="#0B0A07"),
+    axis.title.x = element_text(size = 6, hjust=0.5, color="#0B0A07", face="bold.italic"),
+    axis.title.y = element_text(size = 10, color="#0B0A07", face="bold"),
+    strip.text.x = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+
+  )
+
+p2
+```
+```{r fig.height=10, fig.width=12}
+p1 <- lyr_emo %>% 
+  group_by(artist,sentiment) %>% 
+  summarise(
+    s=sum(n)
+  ) %>% 
+  ggplot(
+    aes(
+      x = reorder_within(sentiment,s,artist,sep="."),
+      y = s,
+      fill = artist,
+      col = artist
+    )
+  )+
+  geom_col()+
+  ylim(0,2000)+
+  geom_text(
+    aes(
+      y = 30,
+      label = sentiment
+    ),hjust = 0, color = "#EBEBEB", face = "bold", family = "Newslab Bold"
+  )+
+  facet_wrap(~artist,scales="free")+
+  coord_flip()+
+  scale_fill_manual(values = c("#FFA62B","#16697A"))+
+  scale_colour_manual(values = c("#FFA62B","#16697A"))+
+  labs(
+    title = "SPEECHLESS: \nA Text Sentiment Analysis of Beyoncé and Taylor Swift. \n",
+    subtitle = "Analysis excludes re-release of live performances and singles.\n\nFigure 1: Word count by emotions, aggregated over all songs from main albums, grouped by emotions\nmatched to NRC database.\n",
+    x = "Main Emotions  \n(by NRC Word-Emotion Lexicon)  ",
+    y = "\nAggregate word count (all albums)  "
+  )+
+  theme_void()+
+  theme(
+    
+    plot.margin=unit(c(t=2,r=2,b=0,l=2),"cm"),
+    plot.background = element_rect(fill = '#EBEBEB'),
+    
+    
+    legend.position = "none",
+    plot.title = element_text(
+      margin = margin(b = 0,unit = "in"),
+      face = "bold",
+      size = 20,
+      hjust = 0,
+      family = "Newslab Bold", 
+      color = "#0B0A07"
+    ),
+    plot.subtitle = element_text(
+      face = "bold.italic",
+      size = 12, 
+      hjust = 0,
+      family = "Newslab", 
+      color = "#0B0A07"
+    ),
+    plot.caption = element_text(
+      face = "italic",
+      size = 12, 
+      hjust = .5,
+      family = "Newslab", 
+      color = "#0B0A07",
+      vjust = 1
+    ),
+    text = element_text(size = 10, hjust=1,family = "Newslab",color = "#0B0A07"),
+    
+    axis.text.y = element_blank(),
+    axis.text.x = element_text(size = 8, color="#0B0A07"),
+    axis.title.x = element_text(size = 6, hjust=0.5, color="#0B0A07", face="bold.italic"),
+    axis.title.y = element_text(size = 10, color="#0B0A07", face="bold"),
+    strip.text.x = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+
+  )
+
+p1
+```
+```{r fig.height=20, fig.width=12}
+gp <- ggarrange(p1,p2,p3,ncol=1)
+```
+
+```{r}
+ggsave(
+  gp, 
+  height = 20,
+  width=12,
+  unit="in",
+  type="cairo",
+  filename="gp.png"
+)
+```
+
+```{r}
+p1a <- p1 +
+  theme(
+    plot.margin=unit(c(t=2,r=2,b=2,l=2),"cm")
+  ) 
+
+p2a <- p2 +
+  theme(
+    plot.margin=unit(c(t=2,r=2,b=2,l=2),"cm")
+  )
+
+p3a <- p3 +
+  theme(
+    plot.margin=unit(c(t=2,r=2,b=2,l=2),"cm")
+  )
+
+
+
+p1a %>% ggsave(height = 12,width = 12,unit = "in",type = "cairo",filename = "p1.png")
+p2a %>% ggsave(height = 12,width = 12,unit = "in",type = "cairo",filename = "p2.png")
+p3a %>% ggsave(height = 12,width = 12,unit = "in",type = "cairo",filename = "p3.png")
+```
+
